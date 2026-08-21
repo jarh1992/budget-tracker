@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mi Presupuesto — Ingreso USD / Gastos COP</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --muted:          #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --success-text:   #006300;
+    --series-1:       #2a78d6;
+    --status-good:      #0ca30c;
+    --status-warning:   #fab219;
+    --status-serious:   #ec835a;
+    --status-critical:  #d03b3b;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --muted:          #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --success-text:   #0ca30c;
+    --series-1:       #3987e5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --muted:          #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --success-text:   #0ca30c;
+      --series-1:       #3987e5;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page);
+    color: var(--text-primary);
+    padding: 24px 16px 64px;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .subtitle { color: var(--text-secondary); font-size: 0.9rem; margin: 0; }
+
+  .theme-toggle {
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-secondary);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  .data-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .data-status {
+    margin: 10px 0 0;
+    font-size: 0.82rem;
+    min-height: 1.1em;
+  }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  .card h2 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+
+  /* TRM card */
+  .trm-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .trm-value { font-size: 1.9rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .trm-meta { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+  .trm-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .trm-manual { display: flex; align-items: center; gap: 6px; }
+  .trm-manual input {
+    width: 110px;
+  }
+
+  button {
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-primary);
+    padding: 8px 14px;
+  }
+  button.primary {
+    background: var(--series-1);
+    border-color: var(--series-1);
+    color: #ffffff;
+    font-weight: 600;
+  }
+  button:disabled { opacity: 0.6; cursor: default; }
+
+  input[type="number"], input[type="text"] {
+    font-family: inherit;
+    font-size: 0.95rem;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--page);
+    color: var(--text-primary);
+    width: 100%;
+  }
+  input:focus { outline: 2px solid var(--series-1); outline-offset: 1px; }
+  label { font-size: 0.8rem; color: var(--text-secondary); display: block; margin-bottom: 4px; }
+
+  /* Stat tiles */
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .tile {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+  }
+  .tile .label { font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; }
+  .tile .value { font-size: 1.3rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tile .sub { font-size: 0.78rem; color: var(--text-secondary); margin-top: 4px; }
+
+  .income-input-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+  }
+  .income-input-row > div:first-child { flex: 1; }
+
+  /* Meter */
+  .meter-track {
+    position: relative;
+    height: 10px;
+    border-radius: 6px;
+    background: var(--gridline);
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .meter-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: 6px;
+    background: var(--series-1);
+    transition: width 0.25s ease, background 0.25s ease;
+  }
+  .meter-caption {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* Summary */
+  .summary-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-radius: 12px;
+    padding: 18px 20px;
+    border: 1px solid var(--border);
+  }
+  .summary-banner .icon {
+    font-size: 1.6rem;
+    line-height: 1;
+  }
+  .summary-banner .summary-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0 0 2px;
+  }
+  .summary-banner .summary-sub {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+  .summary-good { background: color-mix(in srgb, var(--status-good) 10%, var(--surface-1)); }
+  .summary-bad  { background: color-mix(in srgb, var(--status-critical) 10%, var(--surface-1)); }
+  .summary-good .summary-title { color: var(--success-text); }
+  .summary-bad .summary-title { color: var(--status-critical); }
+
+  /* Expense form */
+  .expense-form {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .expense-form .field-label { flex: 1 1 160px; }
+  .expense-form .field-value { flex: 1 1 140px; }
+
+  select {
+    font-family: inherit;
+    font-size: 0.95rem;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--page);
+    color: var(--text-primary);
+    width: 100%;
+  }
+  select:focus { outline: 2px solid var(--series-1); outline-offset: 1px; }
+
+  .tag-manager {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 12px 0 8px;
+  }
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--page);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px 6px 4px 12px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+  }
+  .tag-chip .tag-remove {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    padding: 2px 6px;
+    font-size: 0.85rem;
+    border-radius: 999px;
+    line-height: 1;
+  }
+  .tag-chip .tag-remove:hover { color: var(--status-critical); }
+  .tag-add-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .tag-add-row input { flex: 1; }
+  .tag-add-row button { white-space: nowrap; }
+
+  .planilla-panel {
+    flex-basis: 100%;
+    background: var(--page);
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-top: 2px;
+  }
+  .planilla-panel .planilla-title {
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 8px;
+  }
+  .planilla-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    padding: 3px 0;
+  }
+  .planilla-row .planilla-amount { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .planilla-row.total { border-top: 1px solid var(--gridline); margin-top: 6px; padding-top: 8px; font-weight: 600; }
+  .planilla-row-ibc { align-items: center; gap: 10px; }
+  .planilla-hint { font-weight: 400; color: var(--muted); font-size: 0.76rem; }
+  .planilla-ibc-field { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  input.planilla-amount-input {
+    width: 130px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    padding: 5px 8px;
+  }
+  #planilla-ibc-reset {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    padding: 2px 4px;
+    font-size: 1rem;
+    line-height: 1;
+  }
+  #planilla-ibc-reset:hover { color: var(--series-1); }
+  .expense-detail {
+    display: block;
+    font-size: 0.76rem;
+    color: var(--muted);
+    margin-top: 2px;
+    font-weight: 400;
+  }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  thead th {
+    text-align: left;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+    font-weight: 600;
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--gridline);
+  }
+  thead th.num, tbody td.num { text-align: right; }
+  tbody td {
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--gridline);
+    font-size: 0.92rem;
+    font-variant-numeric: tabular-nums;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  .del-btn {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.95rem;
+    padding: 2px 6px;
+  }
+  .del-btn:hover { color: var(--status-critical); }
+  .empty-state {
+    color: var(--muted);
+    font-size: 0.88rem;
+    padding: 18px 4px;
+    text-align: center;
+  }
+  tfoot td {
+    padding: 10px 4px 4px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 480px) {
+    .tiles { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>Mi Presupuesto</h1>
+      <p class="subtitle" id="today-date"></p>
+    </div>
+    <button class="theme-toggle" id="theme-toggle" type="button">🌓 Modo</button>
+  </header>
+
+  <!-- Guardar / cargar datos -->
+  <div class="card">
+    <h2>Tus datos</h2>
+    <div class="data-actions">
+      <button id="export-json-btn" type="button">⬇ Exportar JSON</button>
+      <button id="import-json-btn" type="button">⬆ Importar JSON</button>
+      <input type="file" id="import-json-file" accept="application/json,.json" style="display:none;">
+    </div>
+    <p class="data-status" id="data-status"></p>
+  </div>
+
+  <!-- TRM card -->
+  <div class="card">
+    <h2>TRM del día (USD → COP)</h2>
+    <div class="trm-row">
+      <div>
+        <div class="trm-value" id="trm-value">Cargando…</div>
+        <div class="trm-meta" id="trm-meta">Consultando fuente oficial…</div>
+      </div>
+      <div class="trm-actions">
+        <div class="trm-manual">
+          <label for="trm-manual-input" style="margin:0;">Ajustar:</label>
+          <input type="number" id="trm-manual-input" step="0.01" min="0" placeholder="—">
+        </div>
+        <button id="trm-refresh" type="button">↻ Actualizar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ingreso -->
+  <div class="card">
+    <h2>Tu ingreso</h2>
+    <div class="income-input-row">
+      <div>
+        <label for="income-usd">Ingreso mensual (USD)</label>
+        <input type="number" id="income-usd" min="0" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+  </div>
+
+  <!-- Stat tiles -->
+  <div class="tiles">
+    <div class="tile">
+      <div class="label">Ingreso en pesos</div>
+      <div class="value" id="tile-income-cop">$0 COP</div>
+      <div class="sub" id="tile-income-usd-sub">$0.00 USD</div>
+    </div>
+    <div class="tile">
+      <div class="label">Total gastos</div>
+      <div class="value" id="tile-total-expenses">$0 COP</div>
+      <div class="sub" id="tile-expense-count">0 gastos registrados</div>
+    </div>
+  </div>
+
+  <!-- Meter -->
+  <div class="card">
+    <h2>Consumo del ingreso</h2>
+    <div class="meter-track">
+      <div class="meter-fill" id="meter-fill" style="width:0%"></div>
+    </div>
+    <div class="meter-caption">
+      <span id="meter-percent">0% usado</span>
+      <span id="meter-label">Ingreso: $0 COP</span>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary-banner summary-good" id="summary-banner">
+    <div class="icon" id="summary-icon">✓</div>
+    <div>
+      <p class="summary-title" id="summary-title">Te quedan $0 COP</p>
+      <p class="summary-sub" id="summary-sub">Equivalente a $0.00 USD</p>
+    </div>
+  </div>
+
+  <!-- Gastos -->
+  <div class="card" style="margin-top:16px;">
+    <h2>Agregar gasto</h2>
+    <form class="expense-form" id="expense-form">
+      <div class="field-label">
+        <label for="expense-label">Etiqueta</label>
+        <select id="expense-label"></select>
+      </div>
+      <div class="field-value" id="value-field-wrap">
+        <label for="expense-value">Valor (COP)</label>
+        <input type="number" id="expense-value" min="0" step="any" placeholder="0" required>
+      </div>
+      <div class="planilla-panel" id="planilla-panel" style="display:none;">
+        <div class="planilla-title">Cálculo automático de planilla (independientes)</div>
+        <div class="planilla-row planilla-row-ibc">
+          <span>IBC — Ingreso base de cotización <span class="planilla-hint">(por defecto, ingreso × 0.4 — puedes editarlo)</span></span>
+          <span class="planilla-ibc-field">
+            <input type="number" id="planilla-ibc-input" class="planilla-amount-input" min="0" step="any">
+            <button type="button" id="planilla-ibc-reset" title="Volver al 40% del ingreso">↺</button>
+          </span>
+        </div>
+        <div class="planilla-row">
+          <span>Salud (IBC × 0.125)</span>
+          <span class="planilla-amount" id="planilla-salud">$0</span>
+        </div>
+        <div class="planilla-row">
+          <span>Pensión (IBC × 0.16)</span>
+          <span class="planilla-amount" id="planilla-pension">$0</span>
+        </div>
+        <div class="planilla-row total">
+          <span>Total a pagar (Salud + Pensión)</span>
+          <span class="planilla-amount" id="planilla-total">$0</span>
+        </div>
+      </div>
+      <button class="primary" type="submit">+ Agregar</button>
+    </form>
+
+    <div class="tag-manager" id="tag-manager"></div>
+    <div class="tag-add-row">
+      <input type="text" id="new-tag-input" placeholder="Nueva etiqueta…">
+      <button type="button" id="new-tag-btn">+ Etiqueta</button>
+    </div>
+
+    <table id="expense-table">
+      <thead>
+        <tr>
+          <th>Etiqueta</th>
+          <th class="num">Valor (COP)</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="expense-tbody">
+        <!-- filled by JS -->
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>Total</td>
+          <td class="num" id="expense-total-cell">$0</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+    <div class="empty-state" id="empty-state" style="display:none;">Aún no has agregado gastos.</div>
+  </div>
+
+  <p class="subtitle" style="text-align:center; margin-top:24px;">
+    Los datos se guardan solo mientras esta página está abierta — usa "Exportar JSON" arriba antes de cerrar o recargar, y "Importar JSON" para continuar donde quedaste.
+  </p>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- State ----------
+  var state = {
+    incomeUsd: 0,
+    trm: null,
+    trmSource: '',
+    trmDate: '',
+    expenses: [], // {id, label, value, detail}
+    tags: ['Arriendo', 'Planilla', 'Mercado', 'Transporte', 'Servicios', 'Entretenimiento', 'Otros']
+  };
+  var nextId = 1;
+  var PLANILLA_TAG = 'Planilla';
+
+  // ---------- Formatters ----------
+  var fmtCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+  var fmtUSD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
+  var fmtDateLong = new Intl.DateTimeFormat('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  document.getElementById('today-date').textContent =
+    capitalize(fmtDateLong.format(new Date()));
+
+  function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  // ---------- Theme toggle ----------
+  var themeBtn = document.getElementById('theme-toggle');
+  themeBtn.addEventListener('click', function () {
+    var root = document.documentElement;
+    var current = root.getAttribute('data-theme');
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (!current) {
+      root.setAttribute('data-theme', prefersDark ? 'light' : 'dark');
+    } else if (current === 'dark') {
+      root.setAttribute('data-theme', 'light');
+    } else {
+      root.setAttribute('data-theme', 'dark');
+    }
+  });
+
+  // ---------- TRM fetching ----------
+  var trmValueEl = document.getElementById('trm-value');
+  var trmMetaEl = document.getElementById('trm-meta');
+  var trmManualInput = document.getElementById('trm-manual-input');
+  var trmRefreshBtn = document.getElementById('trm-refresh');
+  // True once the TRM has been set by hand or via an imported file — guards against
+  // a slow background fetch (e.g. the initial one on load) resolving afterwards
+  // and silently overwriting the value the user just set.
+  var trmLocked = false;
+
+  function setTrm(value, source, dateLabel) {
+    if (trmLocked) return;
+    state.trm = value;
+    state.trmSource = source;
+    state.trmDate = dateLabel || '';
+    trmValueEl.textContent = '$' + value.toLocaleString('es-CO', { maximumFractionDigits: 2 }) + ' COP';
+    trmMetaEl.textContent = source + (dateLabel ? ' · ' + dateLabel : '');
+    trmManualInput.value = value.toFixed(2);
+    renderAll();
+  }
+
+  function fetchTRM() {
+    trmValueEl.textContent = 'Cargando…';
+    trmMetaEl.textContent = 'Consultando fuente oficial…';
+    trmRefreshBtn.disabled = true;
+
+    var officialUrl = 'https://www.datos.gov.co/resource/32sa-8pi3.json?$order=vigenciadesde%20DESC&$limit=1';
+
+    fetch(officialUrl)
+      .then(function (r) { if (!r.ok) throw new Error('bad status'); return r.json(); })
+      .then(function (data) {
+        if (!data || !data[0] || !data[0].valor) throw new Error('sin datos');
+        var valor = parseFloat(data[0].valor);
+        var vigenciaHasta = data[0].vigenciahasta ? data[0].vigenciahasta.slice(0, 10) : '';
+        setTrm(valor, 'Fuente oficial (Superfinanciera / datos.gov.co)', vigenciaHasta ? 'vigente hasta ' + vigenciaHasta : '');
+      })
+      .catch(function () {
+        // Fallback: open.er-api.com
+        fetch('https://open.er-api.com/v6/latest/USD')
+          .then(function (r) { if (!r.ok) throw new Error('bad status'); return r.json(); })
+          .then(function (data) {
+            if (!data || !data.rates || !data.rates.COP) throw new Error('sin datos');
+            setTrm(data.rates.COP, 'Fuente alterna (open.er-api.com)', '');
+          })
+          .catch(function () {
+            if (trmLocked) return;
+            trmValueEl.textContent = 'No disponible';
+            trmMetaEl.textContent = 'No se pudo consultar la TRM. Ingrésala manualmente →';
+          });
+      })
+      .finally(function () {
+        trmRefreshBtn.disabled = false;
+      });
+  }
+
+  trmRefreshBtn.addEventListener('click', function () {
+    // An explicit refresh always wins, even over a manually-set or imported value.
+    trmLocked = false;
+    fetchTRM();
+  });
+
+  trmManualInput.addEventListener('input', function () {
+    var v = parseFloat(trmManualInput.value);
+    if (!isNaN(v) && v > 0) {
+      trmLocked = true;
+      state.trm = v;
+      state.trmSource = 'Valor ajustado manualmente';
+      state.trmDate = '';
+      trmValueEl.textContent = '$' + v.toLocaleString('es-CO', { maximumFractionDigits: 2 }) + ' COP';
+      trmMetaEl.textContent = 'Valor ajustado manualmente';
+      renderAll();
+    }
+  });
+
+  // ---------- Income ----------
+  var incomeInput = document.getElementById('income-usd');
+  incomeInput.addEventListener('input', function () {
+    var v = parseFloat(incomeInput.value);
+    state.incomeUsd = isNaN(v) ? 0 : v;
+    renderAll();
+  });
+
+  // ---------- Expenses ----------
+  var expenseForm = document.getElementById('expense-form');
+  var expenseLabelSelect = document.getElementById('expense-label');
+  var expenseValueInput = document.getElementById('expense-value');
+  var valueFieldWrap = document.getElementById('value-field-wrap');
+  var expenseTbody = document.getElementById('expense-tbody');
+  var expenseTotalCell = document.getElementById('expense-total-cell');
+  var emptyState = document.getElementById('empty-state');
+  var expenseTable = document.getElementById('expense-table');
+  var tagManagerEl = document.getElementById('tag-manager');
+  var newTagInput = document.getElementById('new-tag-input');
+  var newTagBtn = document.getElementById('new-tag-btn');
+  var planillaPanel = document.getElementById('planilla-panel');
+  var planillaIbcInput = document.getElementById('planilla-ibc-input');
+  var planillaIbcResetBtn = document.getElementById('planilla-ibc-reset');
+  var planillaSaludEl = document.getElementById('planilla-salud');
+  var planillaPensionEl = document.getElementById('planilla-pension');
+  var planillaTotalEl = document.getElementById('planilla-total');
+  var ibcOverridden = false; // true once the user edits the IBC field by hand
+
+  function currentIncomeCop() {
+    return state.incomeUsd * (state.trm || 0);
+  }
+
+  function defaultIbc() {
+    return currentIncomeCop() * 0.4;
+  }
+
+  // Reads the (possibly edited) IBC value currently in the field
+  function planillaBreakdown() {
+    var ibc = parseFloat(planillaIbcInput.value);
+    if (isNaN(ibc) || ibc < 0) ibc = 0;
+    var salud = ibc * 0.125;
+    var pension = ibc * 0.16;
+    return { ibc: ibc, salud: salud, pension: pension, total: salud + pension };
+  }
+
+  // ---- Tag (etiqueta) management ----
+  function renderTagSelect() {
+    var previous = expenseLabelSelect.value;
+    expenseLabelSelect.innerHTML = '';
+    state.tags.forEach(function (tag) {
+      var opt = document.createElement('option');
+      opt.value = tag;
+      opt.textContent = tag;
+      expenseLabelSelect.appendChild(opt);
+    });
+    if (state.tags.indexOf(previous) !== -1) {
+      expenseLabelSelect.value = previous;
+    }
+    updateFormForSelectedTag();
+  }
+
+  function renderTagChips() {
+    tagManagerEl.innerHTML = '';
+    state.tags.forEach(function (tag) {
+      var chip = document.createElement('div');
+      chip.className = 'tag-chip';
+
+      var span = document.createElement('span');
+      span.textContent = tag;
+      chip.appendChild(span);
+
+      var removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'tag-remove';
+      removeBtn.textContent = '×';
+      removeBtn.setAttribute('aria-label', 'Quitar etiqueta ' + tag);
+      removeBtn.addEventListener('click', function () { removeTag(tag); });
+      chip.appendChild(removeBtn);
+
+      tagManagerEl.appendChild(chip);
+    });
+  }
+
+  function addTag(name) {
+    name = (name || '').trim();
+    if (!name) return;
+    if (state.tags.indexOf(name) !== -1) return;
+    state.tags.push(name);
+    renderTagChips();
+    renderTagSelect();
+    expenseLabelSelect.value = name;
+    updateFormForSelectedTag();
+  }
+
+  function removeTag(name) {
+    if (state.tags.length <= 1) return; // keep at least one option
+    state.tags = state.tags.filter(function (t) { return t !== name; });
+    renderTagChips();
+    renderTagSelect();
+  }
+
+  newTagBtn.addEventListener('click', function () {
+    addTag(newTagInput.value);
+    newTagInput.value = '';
+    newTagInput.focus();
+  });
+  newTagInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addTag(newTagInput.value);
+      newTagInput.value = '';
+    }
+  });
+
+  // ---- Planilla panel ----
+  // Refreshes the IBC field to the 40%-of-income default, unless the user
+  // has manually edited it (then we respect their value until it's reset).
+  function syncPlanillaIbcDefault() {
+    if (!ibcOverridden) {
+      planillaIbcInput.value = defaultIbc() ? Math.round(defaultIbc()) : '';
+    }
+  }
+
+  function updatePlanillaPanel() {
+    var b = planillaBreakdown();
+    planillaSaludEl.textContent = fmtCOP.format(b.salud);
+    planillaPensionEl.textContent = fmtCOP.format(b.pension);
+    planillaTotalEl.textContent = fmtCOP.format(b.total);
+  }
+
+  planillaIbcInput.addEventListener('input', function () {
+    ibcOverridden = true;
+    updatePlanillaPanel();
+  });
+
+  planillaIbcResetBtn.addEventListener('click', function () {
+    ibcOverridden = false;
+    syncPlanillaIbcDefault();
+    updatePlanillaPanel();
+  });
+
+  function updateFormForSelectedTag() {
+    var isPlanilla = expenseLabelSelect.value === PLANILLA_TAG;
+    planillaPanel.style.display = isPlanilla ? '' : 'none';
+    valueFieldWrap.style.display = isPlanilla ? 'none' : '';
+    expenseValueInput.required = !isPlanilla;
+    if (isPlanilla) {
+      // Fresh 40%-of-income default each time Planilla is (re)selected,
+      // so a second entry starts from the default again and can be tweaked independently.
+      ibcOverridden = false;
+      syncPlanillaIbcDefault();
+      updatePlanillaPanel();
+    }
+  }
+
+  expenseLabelSelect.addEventListener('change', updateFormForSelectedTag);
+
+  expenseForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var label = expenseLabelSelect.value;
+    if (!label) return;
+
+    var value, detail;
+    if (label === PLANILLA_TAG) {
+      var b = planillaBreakdown();
+      value = b.total;
+      detail = 'IBC ' + fmtCOP.format(b.ibc) + ' · Salud ' + fmtCOP.format(b.salud) + ' · Pensión ' + fmtCOP.format(b.pension);
+    } else {
+      value = parseFloat(expenseValueInput.value);
+      detail = '';
+    }
+    if (isNaN(value) || value <= 0) return;
+
+    state.expenses.push({ id: nextId++, label: label, value: value, detail: detail });
+    expenseValueInput.value = '';
+
+    if (label === PLANILLA_TAG) {
+      // Reset so the next Planilla entry (e.g. a second contract) starts from the default again.
+      ibcOverridden = false;
+      syncPlanillaIbcDefault();
+      updatePlanillaPanel();
+    }
+    renderAll();
+  });
+
+  function removeExpense(id) {
+    state.expenses = state.expenses.filter(function (x) { return x.id !== id; });
+    renderAll();
+  }
+
+  function renderExpenses() {
+    expenseTbody.innerHTML = '';
+    if (state.expenses.length === 0) {
+      expenseTable.style.display = 'none';
+      emptyState.style.display = 'block';
+      return;
+    }
+    expenseTable.style.display = '';
+    emptyState.style.display = 'none';
+
+    state.expenses.forEach(function (exp) {
+      var tr = document.createElement('tr');
+
+      var tdLabel = document.createElement('td');
+      tdLabel.textContent = exp.label;
+      if (exp.detail) {
+        var detailEl = document.createElement('span');
+        detailEl.className = 'expense-detail';
+        detailEl.textContent = exp.detail;
+        tdLabel.appendChild(detailEl);
+      }
+
+      var tdValue = document.createElement('td');
+      tdValue.className = 'num';
+      tdValue.textContent = fmtCOP.format(exp.value);
+
+      var tdDel = document.createElement('td');
+      tdDel.style.textAlign = 'right';
+      var delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'del-btn';
+      delBtn.setAttribute('aria-label', 'Eliminar ' + exp.label);
+      delBtn.textContent = '✕';
+      delBtn.addEventListener('click', function () { removeExpense(exp.id); });
+      tdDel.appendChild(delBtn);
+
+      tr.appendChild(tdLabel);
+      tr.appendChild(tdValue);
+      tr.appendChild(tdDel);
+      expenseTbody.appendChild(tr);
+    });
+  }
+
+  // ---------- Exportar / importar JSON ----------
+  var exportBtn = document.getElementById('export-json-btn');
+  var importBtn = document.getElementById('import-json-btn');
+  var importFileInput = document.getElementById('import-json-file');
+  var dataStatusEl = document.getElementById('data-status');
+
+  function showDataStatus(msg, isError) {
+    dataStatusEl.textContent = msg;
+    dataStatusEl.style.color = isError ? 'var(--status-critical)' : 'var(--success-text)';
+  }
+
+  function buildExportData() {
+    return {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      incomeUsd: state.incomeUsd,
+      trm: state.trm,
+      trmSource: state.trmSource,
+      trmDate: state.trmDate,
+      tags: state.tags,
+      expenses: state.expenses.map(function (e) {
+        return { label: e.label, value: e.value, detail: e.detail || '' };
+      })
+    };
+  }
+
+  exportBtn.addEventListener('click', function () {
+    var data = buildExportData();
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var stamp = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = 'presupuesto-' + stamp + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showDataStatus('Datos exportados a presupuesto-' + stamp + '.json', false);
+  });
+
+  importBtn.addEventListener('click', function () { importFileInput.click(); });
+
+  importFileInput.addEventListener('change', function () {
+    var file = importFileInput.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        var data = JSON.parse(e.target.result);
+        applyImportedData(data);
+        showDataStatus('Datos importados desde "' + file.name + '".', false);
+      } catch (err) {
+        showDataStatus('No se pudo importar: el archivo no tiene un formato válido.', true);
+      }
+      importFileInput.value = '';
+    };
+    reader.onerror = function () {
+      showDataStatus('No se pudo leer el archivo.', true);
+      importFileInput.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  function applyImportedData(data) {
+    if (!data || typeof data !== 'object') throw new Error('Formato inválido');
+
+    if (typeof data.incomeUsd === 'number' && !isNaN(data.incomeUsd)) {
+      state.incomeUsd = data.incomeUsd;
+      incomeInput.value = data.incomeUsd;
+    }
+
+    if (typeof data.trm === 'number' && !isNaN(data.trm) && data.trm > 0) {
+      trmLocked = true;
+      state.trm = data.trm;
+      state.trmSource = typeof data.trmSource === 'string' ? data.trmSource : 'Valor importado';
+      state.trmDate = typeof data.trmDate === 'string' ? data.trmDate : '';
+      trmValueEl.textContent = '$' + data.trm.toLocaleString('es-CO', { maximumFractionDigits: 2 }) + ' COP';
+      trmMetaEl.textContent = state.trmSource + (state.trmDate ? ' · ' + state.trmDate : '');
+      trmManualInput.value = data.trm.toFixed(2);
+    }
+
+    if (Array.isArray(data.tags)) {
+      var cleanTags = data.tags.filter(function (t) { return typeof t === 'string' && t.trim(); });
+      if (cleanTags.length) state.tags = cleanTags;
+    }
+
+    if (Array.isArray(data.expenses)) {
+      state.expenses = data.expenses
+        .filter(function (e) { return e && typeof e.label === 'string' && typeof e.value === 'number' && !isNaN(e.value); })
+        .map(function (e) {
+          return { id: nextId++, label: e.label, value: e.value, detail: typeof e.detail === 'string' ? e.detail : '' };
+        });
+    }
+
+    renderTagChips();
+    renderTagSelect();
+    updateFormForSelectedTag();
+    renderAll();
+  }
+
+  // ---------- Summary / tiles / meter ----------
+  var meterFill = document.getElementById('meter-fill');
+  var meterPercent = document.getElementById('meter-percent');
+  var meterLabel = document.getElementById('meter-label');
+  var summaryBanner = document.getElementById('summary-banner');
+  var summaryIcon = document.getElementById('summary-icon');
+  var summaryTitle = document.getElementById('summary-title');
+  var summarySub = document.getElementById('summary-sub');
+
+  function renderAll() {
+    renderExpenses();
+    if (planillaPanel.style.display !== 'none') {
+      syncPlanillaIbcDefault();
+      updatePlanillaPanel();
+    }
+
+    var totalExpenses = state.expenses.reduce(function (sum, e) { return sum + e.value; }, 0);
+    var trm = state.trm || 0;
+    var incomeCop = state.incomeUsd * trm;
+    var remainingCop = incomeCop - totalExpenses;
+    var remainingUsd = trm > 0 ? remainingCop / trm : 0;
+    var percentUsed = incomeCop > 0 ? (totalExpenses / incomeCop) * 100 : 0;
+
+    document.getElementById('tile-income-cop').textContent = fmtCOP.format(incomeCop);
+    document.getElementById('tile-income-usd-sub').textContent = fmtUSD.format(state.incomeUsd) + (trm > 0 ? ' × TRM $' + trm.toLocaleString('es-CO', { maximumFractionDigits: 2 }) : '');
+    document.getElementById('tile-total-expenses').textContent = fmtCOP.format(totalExpenses);
+    document.getElementById('tile-expense-count').textContent = state.expenses.length + (state.expenses.length === 1 ? ' gasto registrado' : ' gastos registrados');
+    expenseTotalCell.textContent = fmtCOP.format(totalExpenses);
+
+    var clampedPercent = Math.min(percentUsed, 100);
+    meterFill.style.width = clampedPercent + '%';
+    meterFill.style.background = percentUsed > 100
+      ? 'var(--status-critical)'
+      : (percentUsed > 80 ? 'var(--status-warning)' : 'var(--series-1)');
+    meterPercent.textContent = Math.round(percentUsed) + '% usado';
+    meterLabel.textContent = 'Ingreso: ' + fmtCOP.format(incomeCop);
+
+    if (remainingCop >= 0) {
+      summaryBanner.className = 'summary-banner summary-good';
+      summaryIcon.textContent = '✓';
+      summaryTitle.textContent = 'Te quedan ' + fmtCOP.format(remainingCop);
+      summarySub.textContent = 'Equivalente a ' + fmtUSD.format(remainingUsd) + (trm > 0 ? '' : ' — ingresa la TRM para ver el equivalente en USD');
+    } else {
+      summaryBanner.className = 'summary-banner summary-bad';
+      summaryIcon.textContent = '⚠';
+      summaryTitle.textContent = 'Te faltan ' + fmtCOP.format(Math.abs(remainingCop));
+      summarySub.textContent = 'Equivalente a ' + fmtUSD.format(Math.abs(remainingUsd)) + ' por encima de tu ingreso';
+    }
+  }
+
+  // ---------- Init ----------
+  renderTagChips();
+  renderTagSelect();
+  fetchTRM();
+  renderAll();
+})();
+</script>
+</body>
+</html>
