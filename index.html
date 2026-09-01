@@ -780,7 +780,22 @@
     exp.detail = planillaDetailText(c);
   }
 
-  // Re-derives every planilla expense whose IBC is still automatic. Called at the
+  // Only one planilla may follow the income: two rows cannot each be 40% of the
+  // same total income — that would double the IBC and quietly rewrite a row the
+  // user had left at, say, the minimum wage. `exp` becomes the automatic one; with
+  // no argument the first one already marked automatic is the one kept. Every other
+  // planilla keeps the IBC it has, as a manual value.
+  function setSoleAutoPlanilla(exp) {
+    var kept = exp || null;
+    state.expenses.forEach(function (e) {
+      if (e.label !== PLANILLA_TAG) return;
+      if (!kept && e.ibcAuto) { kept = e; return; }
+      if (e !== kept) e.ibcAuto = false;
+    });
+    if (kept) kept.ibcAuto = true;
+  }
+
+  // Re-derives the planilla expense whose IBC is still automatic. Called at the
   // top of renderAll(), so it covers the "Actualizar" button, a manual TRM, an
   // income edit and an import alike.
   function syncIncomeDependentExpenses() {
@@ -934,11 +949,13 @@
     if (isNaN(value) || value <= 0) return;
 
     var exp = { id: nextId++, label: label, value: value, detail: detail };
-    if (label === PLANILLA_TAG) {
-      // Only an untouched IBC keeps following the income; a hand-typed one stays put.
-      applyPlanillaIbc(exp, planillaIbc, !ibcOverridden);
-    }
     state.expenses.push(exp);
+    if (label === PLANILLA_TAG) {
+      applyPlanillaIbc(exp, planillaIbc, false);
+      // Only an untouched IBC follows the income — and doing so hands any previous
+      // planilla back its own value as a manual one. A hand-typed IBC stays put.
+      if (!ibcOverridden) setSoleAutoPlanilla(exp);
+    }
     expenseValueInput.value = '';
 
     if (label === PLANILLA_TAG) {
@@ -1005,6 +1022,7 @@
     resetBtn.addEventListener('click', function () {
       editingIbcId = null;
       applyPlanillaIbc(exp, defaultIbc(), true);
+      setSoleAutoPlanilla(exp);
       renderAll();
     });
     wrap.appendChild(resetBtn);
@@ -1197,6 +1215,8 @@
           if (e.label === PLANILLA_TAG) restorePlanillaExpense(exp, e);
           return exp;
         });
+      // A file written before this rule existed may hold several automatic planillas.
+      setSoleAutoPlanilla();
     }
 
     renderTagChips();
