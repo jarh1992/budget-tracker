@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mi Presupuesto — Ingreso USD / Gastos COP</title>
+<title>Mi Presupuesto — Ingresos USD|COP / Gastos COP</title>
 <style>
   :root {
     color-scheme: light;
@@ -172,8 +172,10 @@
     display: flex;
     align-items: flex-end;
     gap: 10px;
+    flex-wrap: wrap;
   }
-  .income-input-row > div:first-child { flex: 1; }
+  .income-input-row > div { flex: 1 1 180px; }
+  .income-hint { color: var(--muted); font-size: 0.8rem; margin: 8px 0 0; }
 
   /* Meter */
   .meter-track {
@@ -333,6 +335,33 @@
     margin-top: 2px;
     font-weight: 400;
   }
+  .expense-ibc {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 0.76rem;
+    color: var(--muted);
+    font-weight: 400;
+  }
+  input.expense-ibc-input {
+    width: 108px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.78rem;
+    padding: 3px 6px;
+  }
+  .expense-ibc-reset {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    padding: 1px 4px;
+    font-size: 0.9rem;
+    line-height: 1;
+  }
+  .expense-ibc-reset:hover { color: var(--series-1); }
+  .expense-ibc-warn { color: var(--status-warning); font-weight: 600; }
 
   table { width: 100%; border-collapse: collapse; margin-top: 14px; }
   thead th {
@@ -426,7 +455,12 @@
         <label for="income-usd">Ingreso mensual (USD)</label>
         <input type="number" id="income-usd" min="0" step="0.01" placeholder="0.00">
       </div>
+      <div>
+        <label for="income-cop">Ingreso mensual (COP)</label>
+        <input type="number" id="income-cop" min="0" step="any" placeholder="0">
+      </div>
     </div>
+    <p class="income-hint">Si recibes en las dos monedas, llena los dos campos: se suman para tu ingreso total.</p>
   </div>
 
   <!-- Stat tiles -->
@@ -434,7 +468,7 @@
     <div class="tile">
       <div class="label">Ingreso en pesos</div>
       <div class="value" id="tile-income-cop">$0 COP</div>
-      <div class="sub" id="tile-income-usd-sub">$0.00 USD</div>
+      <div class="sub" id="tile-income-breakdown">$0.00 USD</div>
     </div>
     <div class="tile">
       <div class="label">Total gastos</div>
@@ -479,10 +513,10 @@
       <div class="planilla-panel" id="planilla-panel" style="display:none;">
         <div class="planilla-title">Cálculo automático de planilla (independientes)</div>
         <div class="planilla-row planilla-row-ibc">
-          <span>IBC — Ingreso base de cotización <span class="planilla-hint">(por defecto, ingreso × 0.4 — puedes editarlo)</span></span>
+          <span>IBC — Ingreso base de cotización <span class="planilla-hint">(por defecto, ingreso × 0.4; nunca menos de un salario mínimo — puedes editarlo)</span></span>
           <span class="planilla-ibc-field">
             <input type="number" id="planilla-ibc-input" class="planilla-amount-input" min="0" step="any">
-            <button type="button" id="planilla-ibc-reset" title="Volver al 40% del ingreso">↺</button>
+            <button type="button" id="planilla-ibc-reset" title="Volver al valor sugerido (40% del ingreso, mínimo un salario mínimo)">↺</button>
           </span>
         </div>
         <div class="planilla-row">
@@ -542,6 +576,7 @@
   // ---------- State ----------
   var state = {
     incomeUsd: 0,
+    incomeCop: 0,
     trm: null,
     trmSource: '',
     trmDate: '',
@@ -550,6 +585,11 @@
   };
   var nextId = 1;
   var PLANILLA_TAG = 'Planilla';
+  // Salario mínimo mensual legal vigente. El IBC de un independiente nunca puede
+  // quedar por debajo de él, aunque el 40% del ingreso sí lo esté.
+  var SALARIO_MINIMO = 1750905;
+  var SALUD_RATE = 0.125;
+  var PENSION_RATE = 0.16;
 
   // ---------- Formatters ----------
   var fmtCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
@@ -651,10 +691,20 @@
   });
 
   // ---------- Income ----------
-  var incomeInput = document.getElementById('income-usd');
-  incomeInput.addEventListener('input', function () {
-    var v = parseFloat(incomeInput.value);
-    state.incomeUsd = isNaN(v) ? 0 : v;
+  // Income can arrive in either currency, or both at once (e.g. a USD contract
+  // plus local work paid in pesos); the two fields are summed, never exclusive.
+  var incomeUsdInput = document.getElementById('income-usd');
+  var incomeCopInput = document.getElementById('income-cop');
+
+  incomeUsdInput.addEventListener('input', function () {
+    var v = parseFloat(incomeUsdInput.value);
+    state.incomeUsd = (isNaN(v) || v < 0) ? 0 : v;
+    renderAll();
+  });
+
+  incomeCopInput.addEventListener('input', function () {
+    var v = parseFloat(incomeCopInput.value);
+    state.incomeCop = (isNaN(v) || v < 0) ? 0 : v;
     renderAll();
   });
 
@@ -678,21 +728,73 @@
   var planillaTotalEl = document.getElementById('planilla-total');
   var ibcOverridden = false; // true once the user edits the IBC field by hand
 
+  // Total income in COP: the USD part converted at the TRM, plus whatever is
+  // already received in pesos.
   function currentIncomeCop() {
-    return state.incomeUsd * (state.trm || 0);
+    return state.incomeUsd * (state.trm || 0) + state.incomeCop;
   }
 
+  // "$1,000.00 USD × TRM $4.000 + $500.000 COP" - only the parts that apply.
+  function incomeBreakdownText(trm) {
+    var parts = [];
+    if (state.incomeUsd > 0 || state.incomeCop === 0) {
+      parts.push(fmtUSD.format(state.incomeUsd) + ' USD' +
+        (trm > 0 ? ' × TRM $' + trm.toLocaleString('es-CO', { maximumFractionDigits: 2 }) : ''));
+    }
+    if (state.incomeCop > 0) {
+      parts.push(fmtCOP.format(state.incomeCop) + ' COP');
+    }
+    return parts.join(' + ');
+  }
+
+  // 40% of the income, but never under one minimum wage — the legal floor for the IBC.
   function defaultIbc() {
-    return currentIncomeCop() * 0.4;
+    return Math.round(Math.max(currentIncomeCop() * 0.4, SALARIO_MINIMO));
   }
 
-  // Reads the (possibly edited) IBC value currently in the field
-  function planillaBreakdown() {
-    var ibc = parseFloat(planillaIbcInput.value);
+  // Same floor applied to a hand-typed IBC.
+  function clampIbc(value) {
+    if (isNaN(value) || value < SALARIO_MINIMO) return SALARIO_MINIMO;
+    return value;
+  }
+
+  function planillaCosts(ibc) {
     if (isNaN(ibc) || ibc < 0) ibc = 0;
-    var salud = ibc * 0.125;
-    var pension = ibc * 0.16;
+    var salud = ibc * SALUD_RATE;
+    var pension = ibc * PENSION_RATE;
     return { ibc: ibc, salud: salud, pension: pension, total: salud + pension };
+  }
+
+  function planillaDetailText(c) {
+    return 'IBC ' + fmtCOP.format(c.ibc) + ' · Salud ' + fmtCOP.format(c.salud) + ' · Pensión ' + fmtCOP.format(c.pension);
+  }
+
+  // Writes an IBC onto a stored planilla expense, recomputing its value and detail.
+  // `auto` marks the expense as still following the suggested IBC, so a new income
+  // (a refreshed TRM, an edited amount) moves it; a hand-typed IBC is left alone.
+  function applyPlanillaIbc(exp, ibc, auto) {
+    var c = planillaCosts(ibc);
+    exp.ibc = c.ibc;
+    exp.ibcAuto = !!auto;
+    exp.value = c.total;
+    exp.detail = planillaDetailText(c);
+  }
+
+  // Re-derives every planilla expense whose IBC is still automatic. Called at the
+  // top of renderAll(), so it covers the "Actualizar" button, a manual TRM, an
+  // income edit and an import alike.
+  function syncIncomeDependentExpenses() {
+    var def = defaultIbc();
+    state.expenses.forEach(function (exp) {
+      if (exp.label !== PLANILLA_TAG || !exp.ibcAuto) return;
+      if (exp.ibc === def) return;
+      applyPlanillaIbc(exp, def, true);
+    });
+  }
+
+  // Reads the (possibly edited) IBC value currently in the form field
+  function planillaBreakdown() {
+    return planillaCosts(parseFloat(planillaIbcInput.value));
   }
 
   // ---- Tag (etiqueta) management ----
@@ -769,7 +871,7 @@
   // has manually edited it (then we respect their value until it's reset).
   function syncPlanillaIbcDefault() {
     if (!ibcOverridden) {
-      planillaIbcInput.value = defaultIbc() ? Math.round(defaultIbc()) : '';
+      planillaIbcInput.value = defaultIbc();
     }
   }
 
@@ -782,6 +884,13 @@
 
   planillaIbcInput.addEventListener('input', function () {
     ibcOverridden = true;
+    updatePlanillaPanel();
+  });
+
+  // The legal floor is applied when the field is left, not on every keystroke,
+  // so it doesn't fight someone still typing the number.
+  planillaIbcInput.addEventListener('change', function () {
+    planillaIbcInput.value = clampIbc(parseFloat(planillaIbcInput.value));
     updatePlanillaPanel();
   });
 
@@ -812,18 +921,24 @@
     var label = expenseLabelSelect.value;
     if (!label) return;
 
-    var value, detail;
+    var value, detail, planillaIbc = 0;
     if (label === PLANILLA_TAG) {
-      var b = planillaBreakdown();
+      planillaIbc = clampIbc(parseFloat(planillaIbcInput.value));
+      var b = planillaCosts(planillaIbc);
       value = b.total;
-      detail = 'IBC ' + fmtCOP.format(b.ibc) + ' · Salud ' + fmtCOP.format(b.salud) + ' · Pensión ' + fmtCOP.format(b.pension);
+      detail = planillaDetailText(b);
     } else {
       value = parseFloat(expenseValueInput.value);
       detail = '';
     }
     if (isNaN(value) || value <= 0) return;
 
-    state.expenses.push({ id: nextId++, label: label, value: value, detail: detail });
+    var exp = { id: nextId++, label: label, value: value, detail: detail };
+    if (label === PLANILLA_TAG) {
+      // Only an untouched IBC keeps following the income; a hand-typed one stays put.
+      applyPlanillaIbc(exp, planillaIbc, !ibcOverridden);
+    }
+    state.expenses.push(exp);
     expenseValueInput.value = '';
 
     if (label === PLANILLA_TAG) {
@@ -840,8 +955,79 @@
     renderAll();
   }
 
+  // Id of the expense whose row IBC field has focus, so the re-render that each
+  // keystroke triggers can hand the focus back instead of dropping the user out.
+  var editingIbcId = null;
+  var pendingIbcFocus = null;
+
+  // Per-row IBC editor for a stored planilla expense. Typing here unhooks that
+  // expense from the suggested IBC; ↺ hooks it back.
+  function buildIbcEditor(exp) {
+    var wrap = document.createElement('div');
+    wrap.className = 'expense-ibc';
+
+    var caption = document.createElement('span');
+    caption.textContent = 'IBC';
+    wrap.appendChild(caption);
+
+    var input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'expense-ibc-input';
+    input.min = '0';
+    input.step = 'any';
+    input.value = exp.ibc;
+    input.setAttribute('aria-label', 'IBC de ' + exp.label);
+    input.addEventListener('input', function () {
+      var v = parseFloat(input.value);
+      if (isNaN(v) || v < 0) return;
+      editingIbcId = exp.id;
+      applyPlanillaIbc(exp, v, false);
+      renderAll();
+    });
+    // On blur/Enter the value settles at the legal floor.
+    input.addEventListener('change', function () {
+      editingIbcId = null;
+      applyPlanillaIbc(exp, clampIbc(parseFloat(input.value)), false);
+      renderAll();
+    });
+    input.addEventListener('blur', function () {
+      if (editingIbcId === exp.id) editingIbcId = null;
+    });
+    if (editingIbcId === exp.id) pendingIbcFocus = input;
+    wrap.appendChild(input);
+
+    var resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'expense-ibc-reset';
+    resetBtn.textContent = '↺';
+    resetBtn.title = 'Volver al valor sugerido (40% del ingreso, mínimo un salario mínimo)';
+    resetBtn.setAttribute('aria-label', 'Volver al IBC sugerido');
+    resetBtn.addEventListener('click', function () {
+      editingIbcId = null;
+      applyPlanillaIbc(exp, defaultIbc(), true);
+      renderAll();
+    });
+    wrap.appendChild(resetBtn);
+
+    var c = planillaCosts(exp.ibc);
+    var note = document.createElement('span');
+    note.textContent = 'Salud ' + fmtCOP.format(c.salud) + ' · Pensión ' + fmtCOP.format(c.pension) +
+      ' · ' + (exp.ibcAuto ? 'sigue el ingreso' : 'IBC manual');
+    wrap.appendChild(note);
+
+    if (exp.ibc < SALARIO_MINIMO) {
+      var warn = document.createElement('span');
+      warn.className = 'expense-ibc-warn';
+      warn.textContent = 'Bajo el mínimo (' + fmtCOP.format(SALARIO_MINIMO) + ')';
+      wrap.appendChild(warn);
+    }
+
+    return wrap;
+  }
+
   function renderExpenses() {
     expenseTbody.innerHTML = '';
+    pendingIbcFocus = null;
     if (state.expenses.length === 0) {
       expenseTable.style.display = 'none';
       emptyState.style.display = 'block';
@@ -855,7 +1041,9 @@
 
       var tdLabel = document.createElement('td');
       tdLabel.textContent = exp.label;
-      if (exp.detail) {
+      if (exp.label === PLANILLA_TAG && typeof exp.ibc === 'number') {
+        tdLabel.appendChild(buildIbcEditor(exp));
+      } else if (exp.detail) {
         var detailEl = document.createElement('span');
         detailEl.className = 'expense-detail';
         detailEl.textContent = exp.detail;
@@ -881,6 +1069,8 @@
       tr.appendChild(tdDel);
       expenseTbody.appendChild(tr);
     });
+
+    if (pendingIbcFocus) pendingIbcFocus.focus();
   }
 
   // ---------- Exportar / importar JSON ----------
@@ -896,15 +1086,22 @@
 
   function buildExportData() {
     return {
-      version: 1,
+      version: 3,
       exportedAt: new Date().toISOString(),
       incomeUsd: state.incomeUsd,
+      incomeCop: state.incomeCop,
       trm: state.trm,
       trmSource: state.trmSource,
       trmDate: state.trmDate,
       tags: state.tags,
       expenses: state.expenses.map(function (e) {
-        return { label: e.label, value: e.value, detail: e.detail || '' };
+        var out = { label: e.label, value: e.value, detail: e.detail || '' };
+        // A planilla also carries its IBC and whether it still follows the income.
+        if (e.label === PLANILLA_TAG && typeof e.ibc === 'number') {
+          out.ibc = e.ibc;
+          out.ibcAuto = !!e.ibcAuto;
+        }
+        return out;
       })
     };
   }
@@ -947,12 +1144,34 @@
     reader.readAsText(file);
   });
 
+  // Files written before version 3 carry no IBC: it is derived back out of the
+  // recorded value, and only counts as automatic when it still matches an IBC
+  // suggested for the imported income — so a hand-tuned old file is not overwritten
+  // the first time the TRM is refreshed. Both the current suggestion and a plain
+  // 40% count, because files written before the minimum-wage floor existed hold
+  // the un-floored figure.
+  function restorePlanillaExpense(exp, raw) {
+    var ibc = (typeof raw.ibc === 'number' && !isNaN(raw.ibc) && raw.ibc >= 0)
+      ? raw.ibc
+      : Math.round(exp.value / (SALUD_RATE + PENSION_RATE));
+    var auto = typeof raw.ibcAuto === 'boolean'
+      ? raw.ibcAuto
+      : (Math.abs(ibc - defaultIbc()) <= 1 || Math.abs(ibc - Math.round(currentIncomeCop() * 0.4)) <= 1);
+    applyPlanillaIbc(exp, ibc, auto);
+  }
+
   function applyImportedData(data) {
     if (!data || typeof data !== 'object') throw new Error('Formato inválido');
 
+    // Files exported before version 2 carry no incomeCop; it simply stays at 0.
     if (typeof data.incomeUsd === 'number' && !isNaN(data.incomeUsd)) {
       state.incomeUsd = data.incomeUsd;
-      incomeInput.value = data.incomeUsd;
+      incomeUsdInput.value = data.incomeUsd;
+    }
+
+    if (typeof data.incomeCop === 'number' && !isNaN(data.incomeCop)) {
+      state.incomeCop = data.incomeCop;
+      incomeCopInput.value = data.incomeCop;
     }
 
     if (typeof data.trm === 'number' && !isNaN(data.trm) && data.trm > 0) {
@@ -974,7 +1193,9 @@
       state.expenses = data.expenses
         .filter(function (e) { return e && typeof e.label === 'string' && typeof e.value === 'number' && !isNaN(e.value); })
         .map(function (e) {
-          return { id: nextId++, label: e.label, value: e.value, detail: typeof e.detail === 'string' ? e.detail : '' };
+          var exp = { id: nextId++, label: e.label, value: e.value, detail: typeof e.detail === 'string' ? e.detail : '' };
+          if (e.label === PLANILLA_TAG) restorePlanillaExpense(exp, e);
+          return exp;
         });
     }
 
@@ -994,6 +1215,7 @@
   var summarySub = document.getElementById('summary-sub');
 
   function renderAll() {
+    syncIncomeDependentExpenses();
     renderExpenses();
     if (planillaPanel.style.display !== 'none') {
       syncPlanillaIbcDefault();
@@ -1002,13 +1224,13 @@
 
     var totalExpenses = state.expenses.reduce(function (sum, e) { return sum + e.value; }, 0);
     var trm = state.trm || 0;
-    var incomeCop = state.incomeUsd * trm;
+    var incomeCop = currentIncomeCop();
     var remainingCop = incomeCop - totalExpenses;
     var remainingUsd = trm > 0 ? remainingCop / trm : 0;
     var percentUsed = incomeCop > 0 ? (totalExpenses / incomeCop) * 100 : 0;
 
     document.getElementById('tile-income-cop').textContent = fmtCOP.format(incomeCop);
-    document.getElementById('tile-income-usd-sub').textContent = fmtUSD.format(state.incomeUsd) + (trm > 0 ? ' × TRM $' + trm.toLocaleString('es-CO', { maximumFractionDigits: 2 }) : '');
+    document.getElementById('tile-income-breakdown').textContent = incomeBreakdownText(trm);
     document.getElementById('tile-total-expenses').textContent = fmtCOP.format(totalExpenses);
     document.getElementById('tile-expense-count').textContent = state.expenses.length + (state.expenses.length === 1 ? ' gasto registrado' : ' gastos registrados');
     expenseTotalCell.textContent = fmtCOP.format(totalExpenses);
@@ -1025,12 +1247,18 @@
       summaryBanner.className = 'summary-banner summary-good';
       summaryIcon.textContent = '✓';
       summaryTitle.textContent = 'Te quedan ' + fmtCOP.format(remainingCop);
-      summarySub.textContent = 'Equivalente a ' + fmtUSD.format(remainingUsd) + (trm > 0 ? '' : ' — ingresa la TRM para ver el equivalente en USD');
+      // Without a TRM there is no meaningful USD figure, so prompt instead of
+      // showing a misleading $0.00 (a peso-only income never needs the TRM).
+      summarySub.textContent = trm > 0
+        ? 'Equivalente a ' + fmtUSD.format(remainingUsd)
+        : 'Ingresa la TRM para ver el equivalente en USD';
     } else {
       summaryBanner.className = 'summary-banner summary-bad';
       summaryIcon.textContent = '⚠';
       summaryTitle.textContent = 'Te faltan ' + fmtCOP.format(Math.abs(remainingCop));
-      summarySub.textContent = 'Equivalente a ' + fmtUSD.format(Math.abs(remainingUsd)) + ' por encima de tu ingreso';
+      summarySub.textContent = trm > 0
+        ? 'Equivalente a ' + fmtUSD.format(Math.abs(remainingUsd)) + ' por encima de tu ingreso'
+        : 'Tus gastos superan tu ingreso';
     }
   }
 
